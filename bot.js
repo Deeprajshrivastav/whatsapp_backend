@@ -483,7 +483,7 @@ app.get("/start", (req, res) => {
     botReady[session] = true;
 
     // Fetch and store menu for this session
-    fetch("http://127.0.0.1:5000/get-bot/" + bot_id)
+    fetch("https://whatsapp-bot-p5ey.onrender.com/get-bot/" + bot_id)
       .then((response) => response.json())
       .then((data) => {
         console.log("Menu fetched for session", data);
