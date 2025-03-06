@@ -438,10 +438,16 @@ import qrcode from "qrcode";
 import express from "express";
 import dotenv from "dotenv";
 import Groq from "groq-sdk";
+// import cors from "cors";  // ✅ Import CORS middleware
 
 dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 3000;
+// app.use(cors({
+//   origin: "*",
+//   methods: ["GET", "POST"],
+ 
+// }));
 
 // Store multiple clients, QR codes, and session-specific data
 const clients = {};
@@ -587,6 +593,90 @@ app.get("/", (req, res) => {
     </html>
   `);
 });
+
+
+
+
+
+
+
+app.get("/bulk_start", async (req, res) => {
+  const session = req.query.session;
+  if (!session) {
+    return res.status(400).send("Session ID is required");
+  }
+
+  if (clients[session]) {
+    return res.send("Session already initialized");
+  }
+
+  clients[session] = new Client({
+    authStrategy: new LocalAuth({ clientId: session }),
+  });
+
+  clients[session].on("qr", async (qr) => {
+    console.log(`New QR Code Generated for ${session}...`);
+    qrCodes[session] = await qrcode.toDataURL(qr);
+    botReady[session] = false;
+  });
+
+  clients[session].on("ready", () => {
+    console.log(`✅ WhatsApp Bot (${session}) is Ready! ${bot_id}`);
+    botReady[session] = true;
+  
+  });
+
+
+
+
+
+  clients[session].initialize();
+  res.send(`Session ${session} initialized.`);
+});
+
+app.use(express.json()); // ✅ Middleware to parse JSON request bodies
+
+app.post("/send-messages", async (req, res) => {
+  const { session, messages } = req.body;
+  // const messages = {"7488259671": "hello world"}
+
+  if (!session || !messages) {
+    return res.status(400).send("Session and messages JSON are required.");
+  }
+
+  if (!clients[session]) {
+    return res.status(404).send(`Session ${session} not found.`);
+  }
+
+  try {
+    await sendBulkMessages(messages, session);
+    res.send("Messages sent successfully.");
+  } catch (error) {
+    console.error("Error sending messages:", error);
+    res.status(500).send("Failed to send messages.");
+  }
+});
+
+
+async function sendBulkMessages(messagesJson, session) {
+  const client = clients[session];
+
+  for (const number in messagesJson) {
+    if (messagesJson.hasOwnProperty(number)) {
+      const message = messagesJson[number];
+      try {
+        console.log(`📤 Sending message to ${number}: ${message}`);
+        await client.sendMessage(`${number}@c.us`, message);
+        console.log(`✅ Message sent to ${number}`);
+      } catch (error) {
+        console.error(`❌ Failed to send message to ${number}:`, error);
+      }
+    }
+  }
+}
+
+
+
 
 // Start Express server
 app.listen(PORT, () => console.log(`🚀 Server running at http://0.0.0.0:${PORT}`));
